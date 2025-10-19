@@ -7,7 +7,7 @@
 HX711 scale;
 
 // Kalibrasi awal (ubah sesuai hasil kalibrasi dengan beban known weight)
-float scale_factor = 2280.0; 
+float scale_factor = 92.3; 
 float density_g_per_ml = 1.0; // default: 1 ml = 1 g
 
 void dispense_ml(float target_ml);

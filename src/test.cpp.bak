@@ -1,0 +1,17 @@
+#include <Arduino.h>
+// Program uji dasar Arduino Uno
+// Mengecek LED internal dan komunikasi serial
+
+void setup() {
+  Serial.begin(9600);          // Mulai komunikasi serial pada baudrate 9600
+  pinMode(LED_BUILTIN, OUTPUT); // Atur pin LED internal (pin 13) sebagai output
+  Serial.println("Tes Arduino dimulai...");
+}
+
+void loop() {
+  Serial.println("Arduino berjalan normal");
+  digitalWrite(LED_BUILTIN, HIGH);  // Nyalakan LED
+  delay(500);
+  digitalWrite(LED_BUILTIN, LOW);   // Matikan LED
+  delay(500);
+}
