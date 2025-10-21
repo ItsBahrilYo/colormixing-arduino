@@ -1,60 +1,91 @@
 #include "HX711.h"
 
-#define DT  2   // HX711 DOUT
-#define SCK 3   // HX711 SCK
-#define PUMP_PIN 5  // MOSFET Gate
+// Pin HX711
+#define DOUT  12
+#define CLK   13
+
+// Pin pompa (via MOSFET)
+#define PUMP_R 3
+#define PUMP_G 4
+#define PUMP_B 5
 
 HX711 scale;
 
-// Kalibrasi awal (ubah sesuai hasil kalibrasi dengan beban known weight)
-float scale_factor = 92.3; 
-float density_g_per_ml = 1.0; // default: 1 ml = 1 g
+float calibration_factor = -2280.0;  // sesuaikan setelah kalibrasi loadcell
+float total_target = 30.0;           // total target campuran dalam gram
 
-void dispense_ml(float target_ml);
+void pumpToWeight(int pumpPin, float target);
 
 void setup() {
   Serial.begin(9600);
-  pinMode(PUMP_PIN, OUTPUT);
-  digitalWrite(PUMP_PIN, LOW);
-
-  scale.begin(DT, SCK);
-  scale.set_scale(scale_factor);
+  scale.begin(DOUT, CLK);
+  scale.set_scale(calibration_factor);
   scale.tare(); // nolkan timbangan
-  Serial.println("Sistem siap. Ketik jumlah ml di Serial Monitor, lalu Enter.");
+
+  pinMode(PUMP_R, OUTPUT);
+  pinMode(PUMP_G, OUTPUT);
+  pinMode(PUMP_B, OUTPUT);
+
+  Serial.println("Masukkan kode warna HEX (misal #33CCFF):");
 }
 
 void loop() {
   if (Serial.available()) {
-    float target_ml = Serial.parseFloat(); 
-    if (target_ml > 0) {
-      dispense_ml(target_ml);
+    String hexColor = Serial.readStringUntil('\n');
+    hexColor.trim();
+    if (hexColor.startsWith("#")) hexColor.remove(0, 1);
+
+    if (hexColor.length() == 6) {
+      int r = strtol(hexColor.substring(0, 2).c_str(), NULL, 16);
+      int g = strtol(hexColor.substring(2, 4).c_str(), NULL, 16);
+      int b = strtol(hexColor.substring(4, 6).c_str(), NULL, 16);
+
+      Serial.print("RGB: ");
+      Serial.print(r); Serial.print(", ");
+      Serial.print(g); Serial.print(", ");
+      Serial.println(b);
+
+      // Hitung total dan proporsi
+      int total = r + g + b;
+      float targetR = total_target * (r / (float)total);
+      float targetG = total_target * (g / (float)total);
+      float targetB = total_target * (b / (float)total);
+
+      Serial.println("Target gram:");
+      Serial.print("R: "); Serial.println(targetR);
+      Serial.print("G: "); Serial.println(targetG);
+      Serial.print("B: "); Serial.println(targetB);
+
+      // Reset berat awal
+      scale.tare();
+
+      // --- Pompa Merah ---
+      pumpToWeight(PUMP_R, targetR);
+      // --- Pompa Hijau ---
+      pumpToWeight(PUMP_G, targetG);
+      // --- Pompa Biru ---
+      pumpToWeight(PUMP_B, targetB);
+
+      Serial.println("Campuran selesai!\n");
+      Serial.println("Masukkan warna berikutnya:");
+    } else {
+      Serial.println("Format salah! Gunakan format #RRGGBB");
     }
   }
 }
 
-void dispense_ml(float target_ml) {
-  float baseline = scale.get_units(10); // berat awal
-  float target_g = target_ml * density_g_per_ml;
-  float target_total = baseline + target_g;
-
-  Serial.print("Dispense ");
-  Serial.print(target_ml);
-  Serial.print(" ml (~");
-  Serial.print(target_g);
-  Serial.println(" g)");
-
-  // Nyalakan pompa
-  digitalWrite(PUMP_PIN, HIGH);
-
-  while (scale.get_units(5) < target_total) {
-    Serial.print("Berat sekarang: ");
-    Serial.println(scale.get_units(5));
-    delay(100); // kurangi noise
+// ------------------------
+// Fungsi untuk pompa hingga berat target
+// ------------------------
+void pumpToWeight(int pumpPin, float target) {
+  scale.tare();
+  digitalWrite(pumpPin, HIGH);
+  while (scale.get_units() < target) {
+    Serial.print("Berat: ");
+    Serial.println(scale.get_units());
+    delay(100);
   }
-
-  // Matikan pompa
-  digitalWrite(PUMP_PIN, LOW);
-  Serial.println("Selesai dispense.");
-  Serial.print("Berat akhir: ");
-  Serial.println(scale.get_units(10));
+  digitalWrite(pumpPin, LOW);
+  Serial.print("Selesai pompa, berat akhir: ");
+  Serial.println(scale.get_units());
 }
