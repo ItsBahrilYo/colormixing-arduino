@@ -1,91 +1,59 @@
-#include "HX711.h"
-
-// Pin HX711
-#define DOUT  12
-#define CLK   13
-
-// Pin pompa (via MOSFET)
-#define PUMP_R 3
-#define PUMP_G 4
-#define PUMP_B 5
-
-HX711 scale;
-
-float calibration_factor = -2280.0;  // sesuaikan setelah kalibrasi loadcell
-float total_target = 30.0;           // total target campuran dalam gram
-
-void pumpToWeight(int pumpPin, float target);
+#include <Arduino.h>
+const int PUMP_PIN = 9;      // PWM pin
+const int RAMP_STEP = 5;     // langkah PWM per iterasi (0-255)
+const int RAMP_DELAY = 20;   // ms delay antar langkah (atur untuk kelembutan)
 
 void setup() {
+  pinMode(PUMP_PIN, OUTPUT);
   Serial.begin(9600);
-  scale.begin(DOUT, CLK);
-  scale.set_scale(calibration_factor);
-  scale.tare(); // nolkan timbangan
+  Serial.println("Masukkan HEX (contoh: #00B7EB) atau perintah ON/OFF/STOP");
+}
 
-  pinMode(PUMP_R, OUTPUT);
-  pinMode(PUMP_G, OUTPUT);
-  pinMode(PUMP_B, OUTPUT);
+int hexToIntensity(const String &hex) {
+  if (hex.length() != 7 || hex[0] != '#') return 0;
+  int r = strtol(hex.substring(1,3).c_str(), NULL, 16);
+  int g = strtol(hex.substring(3,5).c_str(), NULL, 16);
+  int b = strtol(hex.substring(5,7).c_str(), NULL, 16);
+  int intensity = (r + g + b) / 3; // 0..255
+  return intensity;
+}
 
-  Serial.println("Masukkan kode warna HEX (misal #33CCFF):");
+void rampTo(int target) {
+  target = constrain(target, 0, 255);
+  int current = 0;
+  // baca nilai saat ini (kita tak punya fungsi readPWM -> simpan jika perlu)
+  // untuk kesederhanaan mulai dari 0 setiap kali
+  if (target >= current) {
+    for (int v = current; v <= target; v += RAMP_STEP) {
+      analogWrite(PUMP_PIN, v);
+      delay(RAMP_DELAY);
+    }
+  } else {
+    for (int v = current; v >= target; v -= RAMP_STEP) {
+      analogWrite(PUMP_PIN, v);
+      delay(RAMP_DELAY);
+    }
+  }
+  analogWrite(PUMP_PIN, target);
 }
 
 void loop() {
-  if (Serial.available()) {
-    String hexColor = Serial.readStringUntil('\n');
-    hexColor.trim();
-    if (hexColor.startsWith("#")) hexColor.remove(0, 1);
-
-    if (hexColor.length() == 6) {
-      int r = strtol(hexColor.substring(0, 2).c_str(), NULL, 16);
-      int g = strtol(hexColor.substring(2, 4).c_str(), NULL, 16);
-      int b = strtol(hexColor.substring(4, 6).c_str(), NULL, 16);
-
-      Serial.print("RGB: ");
-      Serial.print(r); Serial.print(", ");
-      Serial.print(g); Serial.print(", ");
-      Serial.println(b);
-
-      // Hitung total dan proporsi
-      int total = r + g + b;
-      float targetR = total_target * (r / (float)total);
-      float targetG = total_target * (g / (float)total);
-      float targetB = total_target * (b / (float)total);
-
-      Serial.println("Target gram:");
-      Serial.print("R: "); Serial.println(targetR);
-      Serial.print("G: "); Serial.println(targetG);
-      Serial.print("B: "); Serial.println(targetB);
-
-      // Reset berat awal
-      scale.tare();
-
-      // --- Pompa Merah ---
-      pumpToWeight(PUMP_R, targetR);
-      // --- Pompa Hijau ---
-      pumpToWeight(PUMP_G, targetG);
-      // --- Pompa Biru ---
-      pumpToWeight(PUMP_B, targetB);
-
-      Serial.println("Campuran selesai!\n");
-      Serial.println("Masukkan warna berikutnya:");
+  if (Serial.available() > 0) {
+    String in = Serial.readStringUntil('\n');
+    in.trim();
+    if (in.equalsIgnoreCase("ON")) {
+      rampTo(200); // contoh default power
+      Serial.println("Pompa ON (soft-start)");
+    } else if (in.equalsIgnoreCase("OFF") || in.equalsIgnoreCase("STOP")) {
+      rampTo(0);
+      Serial.println("Pompa OFF (soft-stop)");
+    } else if (in.startsWith("#") && in.length() == 7) {
+      int inten = hexToIntensity(in); // 0..255
+      Serial.print("HEX: "); Serial.print(in);
+      Serial.print(" -> PWM: "); Serial.println(inten);
+      rampTo(inten);
     } else {
-      Serial.println("Format salah! Gunakan format #RRGGBB");
+      Serial.println("Perintah tidak dikenal. Contoh: #00B7EB  atau ON / OFF");
     }
   }
-}
-
-// ------------------------
-// Fungsi untuk pompa hingga berat target
-// ------------------------
-void pumpToWeight(int pumpPin, float target) {
-  scale.tare();
-  digitalWrite(pumpPin, HIGH);
-  while (scale.get_units() < target) {
-    Serial.print("Berat: ");
-    Serial.println(scale.get_units());
-    delay(100);
-  }
-  digitalWrite(pumpPin, LOW);
-  Serial.print("Selesai pompa, berat akhir: ");
-  Serial.println(scale.get_units());
 }
