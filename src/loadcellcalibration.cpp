@@ -6,9 +6,9 @@
 HX711 scale;
 
 void setup() {
-  Serial.begin(9600);
+  Serial.begin(115200);
   scale.begin(DT, SCK);
-  scale.set_scale(92.3); // belum tahu faktor kalibrasi
+  scale.set_scale(1063); // belum tahu faktor kalibrasi
   scale.tare();      // nolkan berat
 
   Serial.println("Taruh beban diketahui (misal 100g)...");

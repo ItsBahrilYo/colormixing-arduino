@@ -1,6 +1,6 @@
 #include <Arduino.h>
 
-const int PUMP_PIN = 9;       // pin PWM ke Gate IRLZ44N
+const int PUMP_PIN = 10;       // pin PWM ke Gate IRLZ44N
 const int RAMP_STEP = 5;      // langkah naik/turun PWM
 const int RAMP_DELAY = 20;    // jeda antar langkah (ms)
 
